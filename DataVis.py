@@ -4,64 +4,7 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-
-def plot_histogram(data, bins=50, x_range=None, y_range=None, title=None, xlabel=None, ylabel="Frequency", logy=False, color='red', histtype='step', linestyle='-',newFigure=True):
-
-    if newFigure :
-        plt.figure()
-    plt.hist(data, bins=bins, range=x_range, color=color, histtype='step', linestyle=linestyle, linewidth=2, label=title)
-    
-    if y_range:
-        plt.ylim(y_range)
-
-    plt.xlabel(xlabel if xlabel else "x" )
-    plt.ylabel(ylabel)
-
-    if logy:
-        plt.yscale("log")
-   
-    if newFigure :
-      plt.tight_layout()
-      plt.savefig("Plots/"+title+".png")
-
-def plot_scatter( x, y, title, xlabel=None, ylabel=None, alpha=0.7, s=10, newFigure=False):
-    
-    if newFigure :
-        plt.figure()
-
-    plt.scatter(x, y, alpha=alpha, s=s)
-
-    plt.xlabel(xlabel if xlabel else "x")
-    plt.ylabel(ylabel if ylabel else "y")
-
-    plt.tight_layout()
-    if newFigure :
-        plt.savefig(f"Plots/{title}.png")
-        plt.close()
-
-def plot_histogram2d(x, y, binsx=10, binsy=50, title=None, xlabel=None, ylabel=None, x_range=None, y_range=None):
- 
-    plt.figure()
-
-    H, xedges, yedges = np.histogram2d(x, y, bins=[binsx, binsy], range=[x_range, y_range])
-
-    # Mask zero bins
-    H_masked = np.ma.masked_where(H == 0, H)
-
-    cmap = plt.cm.viridis.copy()
-    cmap.set_bad(color="white")  # masked bins -> white
-
-    plt.pcolormesh(xedges, yedges, H_masked.T)
-
-    plt.xlabel(xlabel if xlabel else "x")
-    plt.ylabel(ylabel if ylabel else "y")
-    plt.title(title)
-
-    plt.colorbar(label="Counts")
-
-    plt.tight_layout()
-    plt.savefig(f"Plots/{title}.png")
-    plt.close()
+import Functions as Fn
 
 class ImpDataset:
 
@@ -70,46 +13,86 @@ class ImpDataset:
         self.path = path
         self.color = color
         self.line_style = line_style
-        self.data = pd.read_parquet("/scratch/b5ao/pbellos.b5ao/Results/"+path+".parquet") 
+        self.data = pd.read_parquet(path+"pairdf.parquet") 
         print(f"Loaded {self.Title} with {len(self.data)} rows")
 
-    def BondMetrics(self, bond_filter=None , print_header=True) :
+    def BondMetrics(self, bond_filter="" , bond_threshold=0.5, print_header=True) :
 
-        if bond_filter :
-            self.data=self.data[self.data["nmr_types"].str.contains(bond_filter, na=False)]
+        mask = self.data["nmr_types"].str.contains(bond_filter, na=False)
 
-        #print(self.data.head(50))
-        pos_per_bond = ((self.data["bond_existence"] == 1) & (self.data["predicted_bond_existence"] > 0.5)).sum()/(self.data["bond_existence"] == 1).sum()
-        neg_per_bond = ((self.data["bond_existence"] == 0) & (self.data["predicted_bond_existence"] < 0.5)).sum()/(self.data["bond_existence"] == 0).sum()
-        correct = (((self.data["bond_existence"] == 1) & (self.data["predicted_bond_existence"] > 0.5)) | ((self.data["bond_existence"] == 0) & (self.data["predicted_bond_existence"] < 0.5)))
-        correct_molecules = correct.groupby(self.data["molecule_name"]).all().mean()
+        pos_mask = (self.data["bond_existence"] == 1) & mask
+        neg_mask = (self.data["bond_existence"] == 0) & mask
+
+        pos_per_bond = ((pos_mask & (self.data["predicted_bond_existence"] > bond_threshold)).sum()/ pos_mask.sum())
+        neg_per_bond = ((neg_mask & (self.data["predicted_bond_existence"] < bond_threshold)).sum()/ neg_mask.sum())
+
+        correct = (((self.data["bond_existence"] == 1)  & (self.data["predicted_bond_existence"] > bond_threshold)) | ((self.data["bond_existence"] == 0) & (self.data["predicted_bond_existence"] < bond_threshold)))
+
+        correct_molecules = (correct[mask].groupby(self.data.loc[mask, "molecule_name"]).all().mean())
         
         if print_header==True : 
-            print(f"{'Configuration':<25} {'pos/bond':>10} {'neg/bond':>10} {'per mol':>10}")
+            print(f"{'Configuration':<30} {'pos/bond':>10} {'neg/bond':>10} {'per mol':>10}")
             print("-"*60)
-        print(f"{self.Title:<25} " f"{pos_per_bond:10.3%} " f"{neg_per_bond:10.3%} " f"{correct_molecules:10.3%}")
-
-
-
+        print(f"{self.Title:<30} " f"{pos_per_bond:10.2%} " f"{neg_per_bond:10.2%} " f"{correct_molecules:10.2%}")
 
 
 def main():
     
     df=[]
-    #df.append(ImpDataset("Default_Imp Z", "Test1NMR_Zbond_existence_pairdf", 'black'))
+
+    atomdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/aTEST.parquet"
+    pairdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/pTEST.parquet"
+    Results_path = "/scratch/b5ao/pbellos.b5ao/Results/"
+
+    atomdf_test,pairdf_test = Fn.MakeDataSet2(atomdf_test_path,pairdf_test_path,"NMR_B",True)
+
+    Fn.RunPrediction("/projects/b5ao/public/zheqi_model/oneshot_new_embedding.torch"      , atomdf_test, pairdf_test, None, Results_path+"ZheqiNew_test_")
+    Fn.RunPrediction("/projects/b5ao/public/zheqi_model/oneshot_original_embedding.torch" , atomdf_test, pairdf_test, None, Results_path+"ZheqiOrig_test_")
+    
+    df.append(ImpDataset("ZNew B OPT Test", Results_path+"ZheqiNew_test_", 'blue',':'))
+    df.append(ImpDataset("ZOrig B OPT Test", Results_path+"ZheqiOrig_test_", 'blue',':'))
+     
+    bond_thresholds = [0.5]
+    bond_types = ["", "CC", "CH", "OC", "NH", "FC"]
+
+    for i, d in enumerate(df):
+        d.BondMetrics(bond_filter="", bond_threshold=0.5, print_header=(i == 0))
+
+    # plot_histogram([d[0].data.loc[(d[0].data["bond_existence"] == 1) & mask_base,"predicted_bond_existence"], 
+    #                 d[1].data.loc[(d[1].data["bond_existence"] == 0) & mask_base, "predicted_bond_existence"]], 
+    #                 bins=50, x_range=[0, 1], y_range=[1, 10**8], title=d.Title + " +", xlabel="Probability", ylabel="Frequency", color='blue', linestyle=d.line_style, logy=True, newFigure=False)
+
+      
+if __name__ == "__main__":
+    main()
+
+
+
+
+    # df.append(ImpDataset("Default_Imp A OPT Train", "DefaultNMR_Abond_existence_pairdf_train", 'red','-'))
+    # df.append(ImpDataset("Default_Imp A OPT Test", "DefaultNMR_Abond_existence_pairdf_test", 'blue',':'))
+    # df.append(ImpDataset("Default_Imp B OPT Train", "DefaultNMR_Bbond_existence_pairdf_train", 'red','-'))
+    # df.append(ImpDataset("Default_Imp B OPT Test", "DefaultNMR_Bbond_existence_pairdf_test", 'blue',':'))
+
+
+   #df.append(ImpDataset("Default_Imp Z", "Test1NMR_Zbond_existence_pairdf", 'black'))
     #df.append(ImpDataset("Default_Imp A 25 Train", "DefaultNMR_Abond_existence_pairdf_train25", 'red','-'))
     #df.append(ImpDataset("Default_Imp A 25 Eval", "DefaultNMR_Abond_existence_pairdf_eval25", 'green','--'))
     #df.append(ImpDataset("Default_Imp A 25 Test", "DefaultNMR_Abond_existence_pairdf_test25", 'blue',':'))
-    # df.append(ImpDataset("Default_Imp A OPT Train", "DefaultNMR_Abond_existence_pairdf_train", 'red','-'))
+    
     # df.append(ImpDataset("Default_Imp A OPT Eval", "DefaultNMR_Abond_existence_pairdf_eval", 'green','--'))
-    # df.append(ImpDataset("Default_Imp A OPT Test", "DefaultNMR_Abond_existence_pairdf_test", 'blue',':'))
+    
 
     # df.append(ImpDataset("EMB2_Imp A 25 Train", "EMB2NMR_Abond_existence_pairdf_train25", 'red','-'))
     # df.append(ImpDataset("EMB2_Imp A 25 Eval", "EMB2NMR_Abond_existence_pairdf_eval25", 'green','--'))
     # df.append(ImpDataset("EMB2_Imp A 25 Test", "EMB2NMR_Abond_existence_pairdf_test25", 'blue',':'))
     # df.append(ImpDataset("EMB2_Imp A OPT Train", "EMB2NMR_Abond_existence_pairdf_train", 'red','-'))
-    # df.append(ImpDataset("EMB2_Imp A OPT Eval", "EMB2NMR_Abond_existence_pairdf_eval", 'green','--'))
-    # df.append(ImpDataset("EMB2_Imp A OPT Test", "EMB2NMR_Abond_existence_pairdf_test", 'blue',':'))
+    # # # df.append(ImpDataset("EMB2_Imp A OPT Eval", "EMB2NMR_Abond_existence_pairdf_eval", 'green','--'))
+    #df.append(ImpDataset("EMB2_Imp A OPT Test", "EMB2NMR_Abond_existence_pairdf_test", 'blue',':'))
+
+    #df.append(ImpDataset("EMB2_Imp B OPT Train", "EMB2NMR_Bbond_existence_pairdf_train", 'red','-'))
+    # # # df.append(ImpDataset("EMB2_Imp B OPT Eval", "EMB2NMR_Bbond_existence_pairdf_eval", 'green','--'))
+    #df.append(ImpDataset("EMB2_Imp B OPT Test", "EMB2NMR_Bbond_existence_pairdf_test", 'blue',':'))
 
     
     # df.append(ImpDataset("EMB2_sm_Imp A OPT Train", "EMB2_smNMR_Abond_existence_pairdf_train", 'red','-'))
@@ -119,9 +102,9 @@ def main():
     # df.append(ImpDataset("Default_Imp B 25 Train", "DefaultNMR_Bbond_existence_pairdf_train25", 'red','-'))
     # df.append(ImpDataset("Default_Imp B 25 Eval", "DefaultNMR_Bbond_existence_pairdf_eval25", 'green','--'))
     # df.append(ImpDataset("Default_Imp B 25 Test", "DefaultNMR_Bbond_existence_pairdf_test25", 'blue',':'))
-    #df.append(ImpDataset("Default_Imp B OPT Train", "DefaultNMR_Bbond_existence_pairdf_train", 'red','-'))
+
     # df.append(ImpDataset("Default_Imp B OPT Eval", "DefaultNMR_Bbond_existence_pairdf_eval", 'green','--'))
-    #df.append(ImpDataset("Default_Imp B OPT Test", "DefaultNMR_Bbond_existence_pairdf_test", 'blue',':'))
+
 
 
     # df.append(ImpDataset("EMB2_dim35_Imp A OPT Train", "EMB2_dim35NMR_Abond_existence_pairdf_train", 'red','-'))
@@ -152,49 +135,22 @@ def main():
 
     # df.append(ImpDataset("EMB2_noNMR_L5NMR_A_Imp A OPT Train", "EMB2_noNMR_L5NMR_Abond_existence_pairdf_train", 'red','-'))
     # df.append(ImpDataset("EMB2_noNMR_L5NMR_A_Imp A OPT Test", "EMB2_noNMR_L5NMR_Abond_existence_pairdf_test", 'blue',':'))
-    df.append(ImpDataset("EMB2_noNMR_L5_2posNMR_B_Imp B OPT Train", "EMB2_noNMR_L5_2posNMR_Bbond_existence_pairdf_train", 'red','-'))
-    df.append(ImpDataset("EMB2_noNMR_L5_2posNMR_B_Imp B OPT Test", "EMB2_noNMR_L5_2posNMR_Bbond_existence_pairdf_test", 'blue',':'))
+    # df.append(ImpDataset("EMB2_noNMR_L5NMR_B_Imp B OPT Train", "EMB2_noNMR_L5NMR_Bbond_existence_pairdf_train", 'red','-'))
+    # df.append(ImpDataset("EMB2_noNMR_L5NMR_B_Imp B OPT Test", "EMB2_noNMR_L5NMR_Bbond_existence_pairdf_test", 'blue',':'))
+
+    # df.append(ImpDataset("EMB2_ws1NMR_A_Imp A OPT Train", "EMB2_ws1NMR_Abond_existence_pairdf_train", 'red','-'))
+    # df.append(ImpDataset("EMB2_ws1NMR_A_Imp A OPT Test", "EMB2_ws1NMR_Abond_existence_pairdf_test", 'blue',':'))
+    # df.append(ImpDataset("EMB2_ws1NMR_B_Imp B OPT Train", "EMB2_ws1NMR_Bbond_existence_pairdf_train", 'red','-'))
+    # df.append(ImpDataset("EMB2_ws1NMR_B_Imp B OPT Test", "EMB2_ws1NMR_Bbond_existence_pairdf_test", 'blue',':'))
+
+    # df.append(ImpDataset("EMB2_ws10NMR_A_Imp A OPT Train", "EMB2_ws10NMR_Abond_existence_pairdf_train", 'red','-'))
+    # df.append(ImpDataset("EMB2_ws10NMR_A_Imp A OPT Test", "EMB2_ws10NMR_Abond_existence_pairdf_test", 'blue',':'))
+    # df.append(ImpDataset("EMB2_ws10NMR_B_Imp B OPT Train", "EMB2_ws10NMR_Bbond_existence_pairdf_train", 'red','-'))
+    # df.append(ImpDataset("EMB2_ws10NMR_B_Imp B OPT Test", "EMB2_ws10NMR_Bbond_existence_pairdf_test", 'blue',':'))
+
+    # df.append(ImpDataset("ZN B OPT Train", "ZN_B_pairdf_train", 'red','-'))
+    # df.append(ImpDataset("ZN B OPT Test", "ZN_B_pairdf_test", 'blue',':'))
+    # df.append(ImpDataset("ZO B OPT Train", "ZO_B_pairdf_train", 'red','-'))
+    # df.append(ImpDataset("ZO B OPT Test", "ZO_B_pairdf_test", 'blue',':'))
 
 
-
-    for i, d in enumerate(df):
-        d.BondMetrics(bond_filter=None,print_header=(i == 0))
-
-    
-    bond_types = ["", "CC", "CH", "OC", "NH", "FC"]
-
-    for bond in bond_types:
-        plt.figure()
-        
-        for d in df:
-            mask_base = d.data["nmr_types"].str.contains(bond, na=False)
-
-            plot_histogram(d.data.loc[(d.data["bond_existence"] == 1) & mask_base,"predicted_bond_existence"], bins=50, x_range=[0, 1], y_range=[1, 10**8], title=d.Title + " +", xlabel="Probability", ylabel="Frequency", color='blue', linestyle=d.line_style, logy=True, newFigure=False)
-            plot_histogram(d.data.loc[(d.data["bond_existence"] == 0) & mask_base, "predicted_bond_existence"],bins=50, x_range=[0, 1], y_range=[1, 10**8], title=d.Title + " -", xlabel="Probability", ylabel="Frequency", color='red', linestyle=d.line_style, logy=True, newFigure=False)
-
-        plt.legend()
-        plt.savefig(f"Plots/BE_test_B_{bond}.png")
-        plt.close()
-        
-    
-    #print(pairdf.columns)
-    #print(pairdf.head)
-    # print(len(atomdf["molecule_name"].unique()))
-    # pd.set_option('display.max_columns', None)
-    # pd.set_option('display.width', None)
-
-
-    #pairdf = pd.read_parquet("/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/pairdf_Train.parquet")
-    #pairdf = pd.read_parquet("/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/pairdf_Train.parquet")
-
-    # print("made pairdf")
-
-
-    # plot_histogram(atomdf["typeint"], bins=10, x_range=(0,10), title="AtomType", xlabel="Atom type")
-    # plot_scatter(pairdf["coupling"], pairdf["distance"], "DisVsCoup", xlabel="Coupling (?)", ylabel="Distance ($10^{-10}$ m)", alpha=0.7, s=10)
-
-    #plot_histogram2d(pairdf["distance"], pairdf["predicted_distance"], binsx=50, binsy=50, title="DisVsPrDis_2", xlabel="Distance ($10^{-10}$ m)", ylabel="Predicted Distance ($10^{-10}$ m)", x_range=(0,10), y_range=(0,10))
-    #plot_histogram2d(pairdf.loc[pairdf["bond_existence"]==1,"distance"], pairdf.loc[pairdf["bond_existence"]==1,"predicted_distance"], binsx=20, binsy=50, title="DisVsPrDis_1bond", xlabel="Distance ($10^{-10}$ m)", ylabel="Predicted Distance ($10^{-10}$ m)", x_range=(0,2), y_range=(0,5))
-
-if __name__ == "__main__":
-    main()

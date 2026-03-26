@@ -11,49 +11,7 @@ from imp_core_pyg.model.GTN_modules.graph_input import make_graph_df
 from imp_core_pyg.model.gtn_model import GTNmodel
 from torch.utils.tensorboard import SummaryWriter
 import argparse
-import DataVis
-
-def MakeDataSet(atom_data, pair_data, type, print_head) :
-
-    # 1JHH             --> 0
-    # 2JHH - 4JHH <1Hz --> 0
-    # 2JHH - 4JHH >1Hz --> 1 (COSY)
-    # 1JCH        <2Hz --> 0
-    # 1JCH        >2Hz --> 2 (HSQC)
-    # 2JCH - 4JCH      --> 3 (HMBC)
-    # 5JCH - 6JCH      --> 0
-    # 1JNH             --> 4
-    # 2JNH-4JNH        --> 5
-    # 1JFC             --> 7
-    # 2JFC-4JFC        --> 8
-
-    pair_data["coupling_label"] = 0
-    #atom_data["shift_mask"] = 1
- 
-    if type == "NMR_A" or type == "NMR_B":
-        atom_data.loc[atom_data["typeint"] ==8, "shift" ] = 0
-        #atom_data.loc[atom_data["typeint"] ==8, "shift_mask" ] = 0
-        pair_data.loc[pair_data["nmr_types"].str.contains("2JHH|3JHH|4JHH", na=False) & pair_data["coupling"]>1 , "coupling_label"] = 1
-        pair_data.loc[pair_data["nmr_types"].str.contains("1JCH", na=False) & pair_data["coupling"]>2 , "coupling_label"] = 2
-        pair_data.loc[pair_data["nmr_types"].str.contains("2JCH|3JCH|4JCH", na=False), "coupling_label"] = 3
-        pair_data.loc[pair_data["nmr_types"].str.contains("1JNH", na=False), "coupling_label"] = 4
-        pair_data.loc[pair_data["nmr_types"].str.contains("2JNH|3JNH|4JNH", na=False), "coupling_label"] = 5
-        pair_data.loc[pair_data["nmr_types"].str.contains("1JFC", na=False), "coupling_label"] = 7
-        pair_data.loc[pair_data["nmr_types"].str.contains("2JFC|3JFC|4JFC", na=False), "coupling_label"] = 8
-
-    if type=="NMR_B" :
-        atom_data.loc[(atom_data["typeint"] == 7) | (atom_data["typeint"] == 9), "shift"] = 0
-        #atom_data.loc[(atom_data["typeint"] == 7) | (atom_data["typeint"] == 9), "shift_mask"] = 0
-        pair_data.loc[pair_data["nmr_types"].str.contains("NH|FC", na=False), "coupling_label"] = 0
-
-    if print_head==True :
-        print(atom_data.head(50))
-        print("----------------------------------------------------------")
-        print(pair_data.head(50).to_string())
-
-    return atom_data, pair_data
-
-
+import Functions as Fn
 
 
 def main():
@@ -75,6 +33,8 @@ def main():
     parser.add_argument("--target", help="distance or bond_existence", default="distance")
     parser.add_argument("--dataset_type", help="See code for description", default="NMR_Z")
     parser.add_argument("--tag", help="tag for saving the results", default="Test")
+    parser.add_argument("--predict", help="TrainEvalTest", default="")
+    parser.add_argument("--debug", help="Train 1 molecule to debug", default="True")
 
     args = parser.parse_args()
 
@@ -82,15 +42,24 @@ def main():
     print(f"Target: {args.target}")
     print(f"Dataset type: {args.dataset_type}")
     print(f"Task tag: {args.tag}")
+    print(f"Predict mode: {args.predict}")
+    print(f"Debug mode: {args.debug}")
 
-    atomdf = pd.read_parquet("/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/atomdf_Train.parquet")
-    pairdf = pd.read_parquet("/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/pairdf_Train.parquet")
 
-    atomdf_test = pd.read_parquet("/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/atomdf_Test.parquet")
-    pairdf_test = pd.read_parquet("/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/pairdf_Test.parquet")
+    if args.debug=="False" :
+        atomdf_train_path = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/atomdf_Train.parquet"
+        pairdf_train_path = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/pairdf_Train.parquet"
+        atomdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/atomdf_Test.parquet"
+        pairdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/pairdf_Test.parquet"
 
-    atomdf, pairdf = MakeDataSet(atomdf,pairdf,args.dataset_type,True)
-    atomdf_test,pairdf_test = MakeDataSet(atomdf_test,pairdf_test,args.dataset_type,True)
+    else :
+        atomdf_train_path = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/aTEST.parquet"
+        pairdf_train_path = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/pTEST.parquet"
+        atomdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/aTEST.parquet"
+        pairdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/pTEST.parquet"
+
+    atomdf, pairdf = Fn.MakeDataSet2(atomdf_train_path,pairdf_train_path,args.dataset_type,True)
+    atomdf_test,pairdf_test = Fn.MakeDataSet2(atomdf_test_path,pairdf_test_path,args.dataset_type,True)
  
     # get molecules in order of appearance
     molecules = atomdf["molecule_name"].unique()
@@ -120,16 +89,21 @@ def main():
     Mywriter = SummaryWriter(log_dir="./")
 
     d_embed = 48  ##
+    if args.debug=="True" :
+     Epochs = 1
+    else :
+     Epochs = 50
 
     params = {
         "task": "inverse_imp",
-        "tr_epochs": 50, ## 50
+        "tr_epochs": Epochs, ## 50
         "n_head": 8, # must equal no. of target flags you want to predict but ideally should equal no. of total mapping keys 
         "d_embed": d_embed,
         "n_layer": 6,
         "batch_size": 16,
         "save_checkpoint_freq": 5,
-        "final_activation": "sigmoid",     # for distances should be disabled
+        "final_activation": "weighted-sigmoid",     # for distances should be disabled
+        "neg_pos_ratio": 10,
         "molecule_generator": True
         }  
 
@@ -164,51 +138,30 @@ def main():
     model = GTNmodel(id="test_Pan", 
                     model_args=model_args, 
                     model_params = params 
-                    #load_model = "/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" 
                     )
 
    
-    train_loader, _ = model.get_input((train_atom_df, train_pair_df), calculate_scaling=True, shuffle=True)
-
-    eval_loader, _ = model.get_input((eval_atom_df, eval_pair_df), calculate_scaling=False, shuffle=True)
- #   eval_loader, _ = model.get_input((train_atom_df, train_pair_df), calculate_scaling=True, shuffle=True)     ## change between these two for testing  
+    train_loader, _ = model.get_input((train_atom_df, train_pair_df), calculate_scaling=True,  shuffle=True)
+    eval_loader,  _ = model.get_input((eval_atom_df,  eval_pair_df),  calculate_scaling=False, shuffle=True) 
                                                                                                                                                                                                                         
     model.train(train_loader=train_loader, eval_loader=eval_loader, progress=True, resume=False, path="/scratch/b5ao/pbellos.b5ao/Results/", task_name=args.tag+args.dataset_type+args.target, writer=Mywriter)
 
-    pred_atomdf, pred_pairdf = model.predict(train_atom_df, train_pair_df, progress=True)
-    pred_pairdf.to_parquet("/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"_pairdf_train.parquet")
-    # pred_atomdf, pred_pairdf = model.predict(eval_atom_df, eval_pair_df, progress=True)
-    # pred_pairdf.to_parquet("/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"_pairdf_eval.parquet")
-    pred_atomdf, pred_pairdf = model.predict(atomdf_test, pairdf_test, progress=True)    
-    pred_pairdf.to_parquet("/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"_pairdf_test.parquet")
-
     df = pd.read_csv("/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"/loss_metrics/"+args.target+".csv")
-
+ 
     plt.figure()
-    DataVis.plot_scatter( df["epochs"], df["train_ml_loss"], "train", xlabel="Epoch", ylabel="Loss", alpha=0.7, s=10, newFigure=False)
-    DataVis.plot_scatter( df["epochs"], df["eval_ml_loss"], "eval",   xlabel="Epoch", ylabel="Loss", alpha=0.7, s=10, newFigure=False)
+    Fn.plot_scatter( df["epochs"], df["train_ml_loss"], "train", xlabel="Epoch", ylabel="Loss", alpha=0.7, s=10, newFigure=False)
+    Fn.plot_scatter( df["epochs"], df["eval_ml_loss"], "eval",   xlabel="Epoch", ylabel="Loss", alpha=0.7, s=10, newFigure=False)
     plt.show()
     plt.savefig("/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"/loss_metrics/"+args.target+".png")
     plt.close()
-
-    # df = df.iloc[0::5]
-    # best_epoch = df["eval_ml_loss"].idxmin()
-
-    # modelbest = GTNmodel(id="test_Pan", 
-    #             model_args=model_args, 
-    #             model_params = params, 
-    #             load_model = "/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_checkpoint_epoch_"+str(best_epoch)+".torch" 
-    #             )
- 
-    # pred_atomdf, pred_pairdf = modelbest.predict(train_atom_df, train_pair_df, progress=True)  ##
-    # pred_pairdf.to_parquet("/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"_pairdf_train"+str(best_epoch)+".parquet") 
-    # pred_atomdf, pred_pairdf = modelbest.predict(eval_atom_df, eval_pair_df, progress=True)
-    # pred_pairdf.to_parquet("/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"_pairdf_eval"+str(best_epoch)+".parquet")
-    # pred_atomdf, pred_pairdf = modelbest.predict(atomdf_test, pairdf_test, progress=True)
-    # pred_pairdf.to_parquet("/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"_pairdf_test"+str(best_epoch)+".parquet")
-    #pred_atomdf.to_parquet("/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"_atomdf.parquet")
     
-    return 0
+    if "Train" in args.predict:
+        Fn.RunPrediction("/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , train_atom_df, train_pair_df, None, "/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"/Train")
+    if "Eval" in args.predict :
+        Fn.RunPrediction("/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , eval_atom_df, eval_pair_df, None, "/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"/Eval")
+    if "Test" in args.predict :
+        Fn.RunPrediction("/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , atomdf_test, pairdf_test, None, "/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"/Test")
+    
 
 if __name__ == "__main__":
     raise SystemExit(main())
