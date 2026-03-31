@@ -45,6 +45,7 @@ def main():
     print(f"Predict mode: {args.predict}")
     print(f"Debug mode: {args.debug}")
 
+    Results_path = "/scratch/b5ao/pbellos.b5ao/Results/"
 
     if args.debug=="False" :
         atomdf_train_path = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/atomdf_Train.parquet"
@@ -125,8 +126,8 @@ def main():
         'atom_types': ('embed', 61, d_embed-1),    #61
         'shift': (None, None, 1),
         #'shift_mask': (None, None, 1),
-        'coupling_label': ('embed', 100, d_embed-5),       # 100
-        'nmr_types': ('embed', 10000, 5)   #10000
+        'coupling_label': ('embed', 100, 5),       # 100
+        'nmr_types': ('embed', 10000, d_embed-5)   #10000
         }
 
     model_args={'targetflag': [args.target],
@@ -144,23 +145,23 @@ def main():
     train_loader, _ = model.get_input((train_atom_df, train_pair_df), calculate_scaling=True,  shuffle=True)
     eval_loader,  _ = model.get_input((eval_atom_df,  eval_pair_df),  calculate_scaling=False, shuffle=True) 
                                                                                                                                                                                                                         
-    model.train(train_loader=train_loader, eval_loader=eval_loader, progress=True, resume=False, path="/scratch/b5ao/pbellos.b5ao/Results/", task_name=args.tag+args.dataset_type+args.target, writer=Mywriter)
+    model.train(train_loader=train_loader, eval_loader=eval_loader, progress=True, resume=False, path=Results_path, task_name=args.tag+args.dataset_type+args.target, writer=Mywriter)
 
-    df = pd.read_csv("/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"/loss_metrics/"+args.target+".csv")
+    df = pd.read_csv(Results_path+args.tag+args.dataset_type+args.target+"/loss_metrics/"+args.target+".csv")
  
     plt.figure()
     Fn.plot_scatter( df["epochs"], df["train_ml_loss"], "train", xlabel="Epoch", ylabel="Loss", alpha=0.7, s=10, newFigure=False)
     Fn.plot_scatter( df["epochs"], df["eval_ml_loss"], "eval",   xlabel="Epoch", ylabel="Loss", alpha=0.7, s=10, newFigure=False)
     plt.show()
-    plt.savefig("/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"/loss_metrics/"+args.target+".png")
+    plt.savefig(Results_path+args.tag+args.dataset_type+args.target+"/loss_metrics/"+args.target+".png")
     plt.close()
     
     if "Train" in args.predict:
-        Fn.RunPrediction("/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , train_atom_df, train_pair_df, None, "/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"/Train")
+        Fn.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , train_atom_df, train_pair_df, None, Results_path+args.tag+args.dataset_type+args.target+"_train_")
     if "Eval" in args.predict :
-        Fn.RunPrediction("/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , eval_atom_df, eval_pair_df, None, "/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"/Eval")
+        Fn.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , eval_atom_df, eval_pair_df, None, Results_path+args.tag+args.dataset_type+args.target+"_eval_")
     if "Test" in args.predict :
-        Fn.RunPrediction("/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , atomdf_test, pairdf_test, None, "/scratch/b5ao/pbellos.b5ao/Results/"+args.tag+args.dataset_type+args.target+"/Test")
+        Fn.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , atomdf_test, pairdf_test, None, Results_path+args.tag+args.dataset_type+args.target+"_test_")
     
 
 if __name__ == "__main__":

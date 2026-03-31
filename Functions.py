@@ -118,9 +118,9 @@ def MakeDataSet(atom_data, pair_data, type, print_head) :
         pair_data.loc[pair_data["nmr_types"].str.contains("NH|FC", na=False), "coupling_label"] = 0
 
     if print_head==True :
-        print(atom_data.head(50))
+        print(atom_data.head(100))
         print("----------------------------------------------------------")
-        print(pair_data.head(50).to_string())
+        print(pair_data.head(100).to_string())
 
     return atom_data, pair_data
 
@@ -129,13 +129,9 @@ def MakeDataSet2(atom_data_path, pair_data_path, type, print_head) :
     atom_data = pd.read_parquet(atom_data_path)
     pair_data = pd.read_parquet(pair_data_path)
 
-    print(atom_data.head(50))
-    print("----------------------------------------------------------")
-    print(pair_data.head(50).to_string())
-
     # 1JHH             --> 0
-    # 2JHH - 4JHH <1Hz --> 0
-    # 2JHH - 4JHH >1Hz --> 1 (COSY)
+    # 2JHH - 4JHH <2Hz --> 0
+    # 2JHH - 4JHH >2Hz --> 1 (COSY)
     # 1JCH        <2Hz --> 0
     # 1JCH        >2Hz --> 2 (HSQC)
     # 2JCH - 4JCH      --> 3 (HMBC)
@@ -151,13 +147,13 @@ def MakeDataSet2(atom_data_path, pair_data_path, type, print_head) :
     if type == "NMR_A" or type == "NMR_B":
         atom_data.loc[atom_data["typeint"] ==8, "shift" ] = 0
         #atom_data.loc[atom_data["typeint"] ==8, "shift_mask" ] = 0
-        pair_data.loc[pair_data["nmr_types"].str.contains("2JHH|3JHH|4JHH", na=False) & pair_data["coupling"]>2 , "coupling_label"] = 1
-        pair_data.loc[pair_data["nmr_types"].str.contains("1JCH", na=False) & pair_data["coupling"]>2 , "coupling_label"] = 2
-        pair_data.loc[pair_data["nmr_types"].str.contains("2JCH|3JCH|4JCH", na=False) & pair_data["coupling"]>2, "coupling_label"] = 3
-        pair_data.loc[pair_data["nmr_types"].str.contains("1JNH", na=False) & pair_data["coupling"]>2, "coupling_label"] = 4
-        pair_data.loc[pair_data["nmr_types"].str.contains("2JNH|3JNH|4JNH", na=False) & pair_data["coupling"]>2, "coupling_label"] = 5
-        pair_data.loc[pair_data["nmr_types"].str.contains("1JFC", na=False) & pair_data["coupling"]>2, "coupling_label"] = 7
-        pair_data.loc[pair_data["nmr_types"].str.contains("2JFC|3JFC|4JFC", na=False) & pair_data["coupling"]>2, "coupling_label"] = 8
+        pair_data.loc[pair_data["nmr_types"].str.contains("2JHH|3JHH|4JHH", na=False)  & (abs(pair_data["coupling"])>2), "coupling_label"] = 1
+        pair_data.loc[pair_data["nmr_types"].str.contains("1JCH", na=False)            & (abs(pair_data["coupling"])>2), "coupling_label"] = 2
+        pair_data.loc[pair_data["nmr_types"].str.contains("2JCH|3JCH|4JCH", na=False)  & (abs(pair_data["coupling"])>2), "coupling_label"] = 3
+        pair_data.loc[pair_data["nmr_types"].str.contains("1JNH", na=False)            & (abs(pair_data["coupling"])>2), "coupling_label"] = 4
+        pair_data.loc[pair_data["nmr_types"].str.contains("2JNH|3JNH|4JNH", na=False)  & (abs(pair_data["coupling"])>2), "coupling_label"] = 5
+        pair_data.loc[pair_data["nmr_types"].str.contains("1JFC", na=False)            & (abs(pair_data["coupling"])>2), "coupling_label"] = 7
+        pair_data.loc[pair_data["nmr_types"].str.contains("2JFC|3JFC|4JFC", na=False)  & (abs(pair_data["coupling"])>2), "coupling_label"] = 8
 
     if type=="NMR_B" :
         atom_data.loc[(atom_data["typeint"] == 7) | (atom_data["typeint"] == 9), "shift"] = 0
@@ -165,9 +161,9 @@ def MakeDataSet2(atom_data_path, pair_data_path, type, print_head) :
         pair_data.loc[pair_data["nmr_types"].str.contains("NH|FC", na=False), "coupling_label"] = 0
 
     if print_head==True :
-        print(atom_data.head(50))
+        print(atom_data.head(100))
         print("----------------------------------------------------------")
-        print(pair_data.head(50).to_string())
+        print(pair_data.head(100).to_string())
 
     return atom_data, pair_data
 

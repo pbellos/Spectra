@@ -14,6 +14,7 @@ class ImpDataset:
         self.color = color
         self.line_style = line_style
         self.data = pd.read_parquet(path+"pairdf.parquet") 
+        print(self.data.head(1000).to_string())
         print(f"Loaded {self.Title} with {len(self.data)} rows")
 
     def BondMetrics(self, bond_filter="" , bond_threshold=0.5, print_header=True) :
@@ -26,41 +27,48 @@ class ImpDataset:
         pos_per_bond = ((pos_mask & (self.data["predicted_bond_existence"] > bond_threshold)).sum()/ pos_mask.sum())
         neg_per_bond = ((neg_mask & (self.data["predicted_bond_existence"] < bond_threshold)).sum()/ neg_mask.sum())
 
+        recall = ((pos_mask & (self.data["predicted_bond_existence"] > bond_threshold)).sum())/(((pos_mask & (self.data["predicted_bond_existence"] > bond_threshold)).sum())+((neg_mask & (self.data["predicted_bond_existence"] > bond_threshold)).sum()))
+
         correct = (((self.data["bond_existence"] == 1)  & (self.data["predicted_bond_existence"] > bond_threshold)) | ((self.data["bond_existence"] == 0) & (self.data["predicted_bond_existence"] < bond_threshold)))
 
         correct_molecules = (correct[mask].groupby(self.data.loc[mask, "molecule_name"]).all().mean())
         
         if print_header==True : 
-            print(f"{'Configuration':<30} {'pos/bond':>10} {'neg/bond':>10} {'per mol':>10}")
+            print(f"{'Configuration':<30} {'precision':>10} {'recall':>10} {'100% mol':>10}")
             print("-"*60)
-        print(f"{self.Title:<30} " f"{pos_per_bond:10.2%} " f"{neg_per_bond:10.2%} " f"{correct_molecules:10.2%}")
+        print(f"{self.Title:<30} " f"{pos_per_bond:10.2%} " f"{recall:10.2%} " f"{correct_molecules:10.2%}")
 
 
 def main():
     
     df=[]
 
-    atomdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/aTEST.parquet"
-    pairdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/pTEST.parquet"
+    atomdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/atomdf_Test.parquet"
+    pairdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/pairdf_Test.parquet"
     Results_path = "/scratch/b5ao/pbellos.b5ao/Results/"
 
-    atomdf_test,pairdf_test = Fn.MakeDataSet2(atomdf_test_path,pairdf_test_path,"NMR_B",True)
+    # atomdf_test,pairdf_test = Fn.MakeDataSet2(atomdf_test_path,pairdf_test_path,"NMR_B",True)
 
-    Fn.RunPrediction("/projects/b5ao/public/zheqi_model/oneshot_new_embedding.torch"      , atomdf_test, pairdf_test, None, Results_path+"ZheqiNew_test_")
-    Fn.RunPrediction("/projects/b5ao/public/zheqi_model/oneshot_original_embedding.torch" , atomdf_test, pairdf_test, None, Results_path+"ZheqiOrig_test_")
+    # Fn.RunPrediction("/projects/b5ao/public/zheqi_model/oneshot_new_embedding.torch"      , atomdf_test, pairdf_test, None, Results_path+"ZheqiNew2_test_")
+    # Fn.RunPrediction("/projects/b5ao/public/zheqi_model/oneshot_original_embedding.torch" , atomdf_test, pairdf_test, None, Results_path+"ZheqiOrig2_test_")
     
-    df.append(ImpDataset("ZNew B OPT Test", Results_path+"ZheqiNew_test_", 'blue',':'))
-    df.append(ImpDataset("ZOrig B OPT Test", Results_path+"ZheqiOrig_test_", 'blue',':'))
+    df.append(ImpDataset("ZNew B OPT Test", Results_path+"ZheqiNew2_test_", 'blue',':'))
+    df.append(ImpDataset("ZOrig B OPT Test", Results_path+"ZheqiOrig2_test_", 'blue',':'))
+    #df.append(ImpDataset("Default_Imp B OPT Test", Results_path+"DefaultNMR_Bbond_existence_test_", 'green','--'))
+
+    # df.append(ImpDataset("EMB2_ws10NMR_A_Imp B OPT Test", Results_path+"EMB2_ws10NMR_Abond_existence_test_", 'blue','-'))
+    # df.append(ImpDataset("EMB2_ws10NMR_B_Imp A OPT Test", Results_path+"EMB2_ws10NMR_Bbond_existence_test_", 'blue','-'))
      
-    bond_thresholds = [0.5]
+    bond_thresholds = [0.5] #0.89, 0.90, 0.91, 0.92, 0.93, 0.94, 0.95]
     bond_types = ["", "CC", "CH", "OC", "NH", "FC"]
+    
+    for bt in bond_thresholds : 
+      for i, d in enumerate(df):
+          d.BondMetrics(bond_filter='', bond_threshold=bt, print_header=(i == 0))
 
-    for i, d in enumerate(df):
-        d.BondMetrics(bond_filter="", bond_threshold=0.5, print_header=(i == 0))
-
-    # plot_histogram([d[0].data.loc[(d[0].data["bond_existence"] == 1) & mask_base,"predicted_bond_existence"], 
-    #                 d[1].data.loc[(d[1].data["bond_existence"] == 0) & mask_base, "predicted_bond_existence"]], 
-    #                 bins=50, x_range=[0, 1], y_range=[1, 10**8], title=d.Title + " +", xlabel="Probability", ylabel="Frequency", color='blue', linestyle=d.line_style, logy=True, newFigure=False)
+    Fn.plot_histogram([df[0].data.loc[(df[0].data["bond_existence"] == 1) & df[0].data["nmr_types"].str.contains(bond_types[0], na=False),"predicted_bond_existence"], 
+                       df[1].data.loc[(df[1].data["bond_existence"] == 0) & df[1].data["nmr_types"].str.contains(bond_types[0], na=False),"predicted_bond_existence"]], 
+                       bins=50, x_range=[0, 1], y_range=[1, 10**8], title='TestPlot', xlabel="Probability", ylabel="Frequency", color=['blue','red'], linestyle=d.line_style, logy=True, newFigure=True)
 
       
 if __name__ == "__main__":
