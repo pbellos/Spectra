@@ -34,7 +34,7 @@ def main():
     parser.add_argument("--dataset_type", help="See code for description", default="NMR_Z")
     parser.add_argument("--tag", help="tag for saving the results", default="Test")
     parser.add_argument("--predict", help="TrainEvalTest", default="")
-    parser.add_argument("--debug", help="Train 1 molecule to debug", default="True")
+    parser.add_argument("--debug", help="Train 2 molecules to debug", default="True")
 
     args = parser.parse_args()
 
@@ -48,19 +48,19 @@ def main():
     Results_path = "/scratch/b5ao/pbellos.b5ao/Results/"
 
     if args.debug=="False" :
-        atomdf_train_path = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/atomdf_Train.parquet"
-        pairdf_train_path = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/pairdf_Train.parquet"
-        atomdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/atomdf_Test.parquet"
-        pairdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/pairdf_Test.parquet"
+        atomdf_train_path = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/FCatomdf_Train.parquet"
+        pairdf_train_path = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/FCpairdf_Train.parquet"
+        atomdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/FCatomdf_Test.parquet"
+        pairdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/FCpairdf_Test.parquet"
 
     else :
-        atomdf_train_path = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/aTEST.parquet"
-        pairdf_train_path = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/pTEST.parquet"
-        atomdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/aTEST.parquet"
-        pairdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/pTEST.parquet"
+        atomdf_train_path = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/FCa_Test.parquet"
+        pairdf_train_path = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/FCp_Test.parquet"
+        atomdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/FCa_Test.parquet"
+        pairdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/FCp_Test.parquet"
 
-    atomdf, pairdf = Fn.MakeDataSet2(atomdf_train_path,pairdf_train_path,args.dataset_type,True)
-    atomdf_test,pairdf_test = Fn.MakeDataSet2(atomdf_test_path,pairdf_test_path,args.dataset_type,True)
+    atomdf, pairdf = Fn.MakeDataSet2(atomdf_train_path,pairdf_train_path,args.dataset_type,False)
+    atomdf_test,pairdf_test = Fn.MakeDataSet2(atomdf_test_path,pairdf_test_path,args.dataset_type,False)
  
     # get molecules in order of appearance
     molecules = atomdf["molecule_name"].unique()
@@ -103,7 +103,7 @@ def main():
         "n_layer": 6,
         "batch_size": 16,
         "save_checkpoint_freq": 5,
-        "final_activation": "weighted-sigmoid",     # for distances should be disabled
+        "final_activation": "weighted-sigmoid",  # or weighted-sigmoid   # for distances should be disabled
         "neg_pos_ratio": 10,
         "molecule_generator": True
         }  
@@ -126,8 +126,8 @@ def main():
         'atom_types': ('embed', 61, d_embed-1),    #61
         'shift': (None, None, 1),
         #'shift_mask': (None, None, 1),
-        'coupling_label': ('embed', 100, 5),       # 100
-        'nmr_types': ('embed', 10000, d_embed-5)   #10000
+        'coupling_label': ('embed', 100, d_embed-5),       # 100
+        'nmr_types': ('embed', 10000, 5)   #10000
         }
 
     model_args={'targetflag': [args.target],

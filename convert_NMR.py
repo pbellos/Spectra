@@ -6,8 +6,6 @@ import pandas as pd
 from EMS.EMS import EMS
 from EMS.modules.dataframe_generation.dataframe_parse import make_atoms_df, make_pairs_df
  
-batches = glob.glob("/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/PubChem_CHEMBL-B1234-30-200000_*")
-
 with open('/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/PubChem_CHEMBL-B1234-30-200000_2000_eval.sdf', 'r') as f:
     lines = f.read()
     mol_block = lines.split('$$$$\n')
@@ -40,9 +38,8 @@ atomdf = make_atoms_df(ems_list)
 pairdf = make_pairs_df(ems_list)
 
 
-atomdf.to_parquet(f"/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/atomdf_Test.parquet")
-pairdf.to_parquet(f"/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/pairdf_Test.parquet")
-
+atomdf.to_parquet(f"/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/FCatomdf_Test.parquet")
+pairdf.to_parquet(f"/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/FCpairdf_Test.parquet")
 
 
 
@@ -111,15 +108,17 @@ print(atomdf.iloc[[0]])
 print(atomdf.iloc[[1]])
 print(atomdf.iloc[[2]])
 print("...............")
-print(atomdf.iloc[[100]])
-print(atomdf.iloc[[101]])
-print(atomdf.iloc[[102]])
+print(atomdf.iloc[[50]])
+print(atomdf.iloc[[51]])
+print(atomdf.iloc[[52]])
+print(len(atomdf))
 
 print("===========")
 print(pairdf.iloc[[0]])
 print(pairdf.iloc[[1]])
 print(pairdf.iloc[[2]])
 print("...............")
-print(pairdf.iloc[[1000]])
-print(pairdf.iloc[[1001]])
-print(pairdf.iloc[[1002]])
+print(pairdf.iloc[[100]])
+print(pairdf.iloc[[101]])
+print(pairdf.iloc[[102]])
+print(len(pairdf))
