@@ -11,7 +11,7 @@ from imp_core_pyg.model.GTN_modules.graph_input import make_graph_df
 from imp_core_pyg.model.gtn_model import GTNmodel
 from torch.utils.tensorboard import SummaryWriter
 import argparse
-import Functions as Fn
+import Utils as U
 
 
 def main():
@@ -59,8 +59,8 @@ def main():
         atomdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/FCa_Test.parquet"
         pairdf_test_path  = "/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/FCp_Test.parquet"
 
-    atomdf, pairdf = Fn.MakeDataSet2(atomdf_train_path,pairdf_train_path,args.dataset_type,False)
-    atomdf_test,pairdf_test = Fn.MakeDataSet2(atomdf_test_path,pairdf_test_path,args.dataset_type,False)
+    atomdf, pairdf = U.MakeDataSet2(atomdf_train_path,pairdf_train_path,args.dataset_type,False)
+    atomdf_test,pairdf_test = U.MakeDataSet2(atomdf_test_path,pairdf_test_path,args.dataset_type,False)
  
     # get molecules in order of appearance
     molecules = atomdf["molecule_name"].unique()
@@ -103,7 +103,7 @@ def main():
         "n_layer": 6,
         "batch_size": 16,
         "save_checkpoint_freq": 5,
-        "final_activation": "weighted-sigmoid",  # or weighted-sigmoid   # for distances should be disabled
+        #"final_activation": "weighted-sigmoid",  # or weighted-sigmoid   # for distances should be disabled
         "neg_pos_ratio": 10,
         "molecule_generator": True
         }  
@@ -114,13 +114,9 @@ def main():
         #'shift_mask': ('shift_mask', 'int'),
         'coupling_label': ('coupling_label', 'int'),
         'nmr_types': ('nmr_types', 'int'),
-        'bond_existence': ('bond_existence', 'float')
+        #'bond_existence': ('bond_existence', 'float')
+        'distance': ('distance', 'float')
         }
-
-    # input_attr = {'atom_types': ('embed', 61, 99), 
-    #               'nmr_types': ('embed', 10000, 99), 
-    #               'coupling': (None, None, 1),
-    #               'shift': (None, None, 1)}
 
     input_attr = {
         'atom_types': ('embed', 61, d_embed-1),    #61
@@ -136,12 +132,8 @@ def main():
     }
 
     print("Initialsing model")
-    model = GTNmodel(id="test_Pan", 
-                    model_args=model_args, 
-                    model_params = params 
-                    )
+    model = GTNmodel(id="test_Pan", model_args=model_args, model_params = params)
 
-   
     train_loader, _ = model.get_input((train_atom_df, train_pair_df), calculate_scaling=True,  shuffle=True)
     eval_loader,  _ = model.get_input((eval_atom_df,  eval_pair_df),  calculate_scaling=False, shuffle=True) 
                                                                                                                                                                                                                         
@@ -149,19 +141,16 @@ def main():
 
     df = pd.read_csv(Results_path+args.tag+args.dataset_type+args.target+"/loss_metrics/"+args.target+".csv")
  
-    plt.figure()
-    Fn.plot_scatter( df["epochs"], df["train_ml_loss"], "train", xlabel="Epoch", ylabel="Loss", alpha=0.7, s=10, newFigure=False)
-    Fn.plot_scatter( df["epochs"], df["eval_ml_loss"], "eval",   xlabel="Epoch", ylabel="Loss", alpha=0.7, s=10, newFigure=False)
-    plt.show()
-    plt.savefig(Results_path+args.tag+args.dataset_type+args.target+"/loss_metrics/"+args.target+".png")
-    plt.close()
+    U.plot_scatter([df["epochs"], df["epochs"]], [df["train_ml_loss"], df["eval_ml_loss"]],
+                   colors=["blue", "orange"], labels=["train", "eval"], alpha=0.7, s=10,
+                   title=args.tag + args.dataset_type + args.target + "/loss_metrics/" + args.target, xlabel="Epoch", ylabel="Loss")
     
     if "Train" in args.predict:
-        Fn.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , train_atom_df, train_pair_df, None, Results_path+args.tag+args.dataset_type+args.target+"_train_")
+        U.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , train_atom_df, train_pair_df, None, Results_path+args.tag+args.dataset_type+args.target+"_train_")
     if "Eval" in args.predict :
-        Fn.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , eval_atom_df, eval_pair_df, None, Results_path+args.tag+args.dataset_type+args.target+"_eval_")
+        U.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , eval_atom_df, eval_pair_df, None, Results_path+args.tag+args.dataset_type+args.target+"_eval_")
     if "Test" in args.predict :
-        Fn.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , atomdf_test, pairdf_test, None, Results_path+args.tag+args.dataset_type+args.target+"_test_")
+        U.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , atomdf_test, pairdf_test, None, Results_path+args.tag+args.dataset_type+args.target+"_test_")
     
 
 if __name__ == "__main__":

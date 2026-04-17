@@ -31,8 +31,6 @@ def RunPrediction(model_path, atomdf, pairdf, atom_save_path, pair_save_path):
     if pair_save_path is not None:  
         pred_pairdf.to_parquet(pair_save_path + "pairdf.parquet")
 
-import matplotlib.pyplot as plt
-
 def plot_histogram(data, bins=50, x_range=None, y_range=None, title=None, xlabel=None, ylabel="Frequency", logy=False, colors=None, linestyles=None, labels=None):
  
     plt.figure()
@@ -52,8 +50,11 @@ def plot_histogram(data, bins=50, x_range=None, y_range=None, title=None, xlabel
     assert len(labels) == n, "labels length must match data length"
 
     for d, c, ls, lab in zip(data, colors, linestyles, labels):
-        plt.hist( d, bins=bins, range=x_range, histtype='step', linestyle=ls, linewidth=2, color=c, label=lab)
-
+        if isinstance(d, tuple):  # precomputed np.histogram
+            plt.stairs(d[0], d[1], linestyle=ls, linewidth=2, color=c, label=lab)
+        else:  # raw data
+            plt.hist(d, bins=bins, range=x_range, histtype='step', linestyle=ls, linewidth=2, color=c, label=lab)
+    
     if y_range:
         plt.ylim(y_range)
 
@@ -69,26 +70,57 @@ def plot_histogram(data, bins=50, x_range=None, y_range=None, title=None, xlabel
     plt.tight_layout()
     plt.savefig("Plots/" + (title if title else "hist") + ".png")
 
-def plot_scatter( x, y, title, xlabel=None, ylabel=None, alpha=0.7, s=10, newFigure=False):
-    
-    if newFigure :
-        plt.figure()
+def plot_scatter(x_data, y_data, title=None, xlabel=None, ylabel=None, colors=None, markers=None, labels=None, alpha=0.7, s=10, x_range=None, y_range=None):
 
-    plt.scatter(x, y, alpha=alpha, s=s)
+    plt.figure()
+
+    n = len(x_data)
+
+    # defaults
+    if colors is None:
+        colors = ["red"] * n
+    if markers is None:
+        markers = ["o"] * n
+    if labels is None:
+        labels = [None] * n
+
+    # sanity checks
+    assert len(y_data) == n, "x_data and y_data must match"
+    assert len(colors) == n, "colors length must match data length"
+    assert len(markers) == n, "markers length must match data length"
+    assert len(labels) == n, "labels length must match data length"
+
+    for x, y, c, m, lab in zip(x_data, y_data, colors, markers, labels):
+        plt.scatter(x, y, color=c, marker=m, alpha=alpha, s=s, label=lab)
+
+    if x_range:
+        plt.xlim(x_range)
+
+    if y_range:
+        plt.ylim(y_range)
 
     plt.xlabel(xlabel if xlabel else "x")
     plt.ylabel(ylabel if ylabel else "y")
 
-    plt.tight_layout()
-    if newFigure :
-        plt.savefig(f"Plots/{title}.png")
-        plt.close()
+    if labels and any(labels):
+        plt.legend()
 
-def plot_histogram2d(x, y, binsx=10, binsy=50, title=None, xlabel=None, ylabel=None, x_range=None, y_range=None):
+    plt.tight_layout()
+    plt.savefig("Plots/" + (title if title else "scatter") + ".png")
+    plt.close()
+
+def plot_histogram2d(data, bins, title=None, xlabel=None, ylabel=None, x_range=None, y_range=None):
  
     plt.figure()
 
-    H, xedges, yedges = np.histogram2d(x, y, bins=[binsx, binsy], range=[x_range, y_range])
+    if isinstance(data, tuple) and len(data) == 3:
+        # precomputed np.histogram2d output
+        H, xedges, yedges = data
+
+    else:
+        # raw x,y arrays
+        x, y = data
+        H, xedges, yedges = np.histogram2d(x, y, bins=bins, range=[x_range, y_range])
 
     # Mask zero bins
     H_masked = np.ma.masked_where(H == 0, H)
@@ -165,7 +197,7 @@ def build_mol_bond_order(atom_df, pair_df, BO_column, rdmol=False):
     for _, row in pair_df.iterrows():
         atom_0 = row['atom_index_0']
         atom_1 = row['atom_index_1']
-        bond_order = row[BO_column]
+        bond_order = BO_column.loc[row.name]
         if atom_0 == atom_1:
             continue
         if (atom_0, atom_1) in bond_list or (atom_1, atom_0) in bond_list:
