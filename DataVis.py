@@ -16,8 +16,8 @@ def main():
     # Bdf.append(ImpDataset("Original dataset_B", "Test", Results_path+"DefaultNMR_Bbond_existence_test_pairdf.parquet"))
     # Bdf.append(ImpDataset("Z Orig dataset_B", "Test", Results_path+"ZheqiOrig_test_pairdf.parquet"))
     
-    # parameters = ["CC", 0.5]  #bond type, decision threshold
-    # metrics    = ["Precision", "Recall", "PerfectMolecules"]
+    # parameters = ["", 0.5]  #bond type, decision threshold
+    # metrics    = ["Precision", "Recall", "PerfectMolecules", "TruePositiveRate", "TrueNegativeRate"]
     # plots      = ["PBP", "NBP"]
 
     # for i, d in enumerate(Bdf):
@@ -33,7 +33,7 @@ def main():
     Ddf.append(ImpDataset("Distance_Default_Train", "Train", Results_path+"DisDefNMR_Bdistance_train_pairdf.parquet"))
     Ddf.append(ImpDataset("Distance_Default_Test", "Test", Results_path+"DisDefNMR_Bdistance_test_pairdf.parquet"))
 
-    parameters = [4]  #max path lenght
+    parameters = [40]  #max path lenght
     metrics    = ["DistanceMeanError"]
     plots      = ["DistanceMEPerMolecule", "DistancePredVsTrue"]
 
@@ -44,7 +44,7 @@ def main():
                       colors=['black','red'], linestyles=['-','-'], labels=["Train", "Test"],
                       bins=40, x_range=[-3, 3], y_range=None, title='DisTrvsTs', xlabel="Mean Error per Molecule [10$^{-10}$ m]", ylabel="Frequency", logy=False)
 
-    U.plot_histogram2d(Ddf[0].Plots["DistancePredVsTrue"], bins=[40, 40], x_range=[0,4], y_range=[0,4], title="Dis", xlabel="True", ylabel="Pred")
+    U.plot_histogram2d(Ddf[0].Plots["DistancePredVsTrue"], bins=[40, 40], x_range=[0,10], y_range=[0,10], title="Dis", xlabel="True", ylabel="Pred")
 
 if __name__ == "__main__":
     main()

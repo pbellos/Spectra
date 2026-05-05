@@ -125,10 +125,10 @@ def plot_histogram2d(data, bins, title=None, xlabel=None, ylabel=None, x_range=N
     # Mask zero bins
     H_masked = np.ma.masked_where(H == 0, H)
 
-    cmap = plt.cm.viridis.copy()
-    cmap.set_bad(color="white")  # masked bins -> white
+    cmap = plt.cm.Reds.copy()
+    cmap.set_bad("white")
 
-    plt.pcolormesh(xedges, yedges, H_masked.T)
+    plt.pcolormesh(xedges, yedges, H_masked.T, cmap=cmap)
 
     plt.xlabel(xlabel if xlabel else "x")
     plt.ylabel(ylabel if ylabel else "y")
