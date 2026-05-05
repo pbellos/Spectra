@@ -35,15 +35,17 @@ class ImpDataset:
         
         bond_filter, bond_threshold = parameters[0], parameters[1]
 
-        mask = self.pair_data["nmr_types"].str.contains(bond_filter, na=False)
-        pos_mask = (self.pair_data["bond_existence"] == 1) & mask
-        neg_mask = (self.pair_data["bond_existence"] == 0) & mask
+        bond_mask = self.pair_data["nmr_types"].str.contains(bond_filter, na=False)
+        pos_mask = (self.pair_data["bond_existence"] == 1) & bond_mask
+        neg_mask = (self.pair_data["bond_existence"] == 0) & bond_mask
 
         metric_funcs = {
-            "Recall":           lambda: self.calculate_recall(pos_mask, bond_threshold),
-            "Precision":        lambda: self.calculate_precision(pos_mask, neg_mask, bond_threshold),
-            "PerfectMolecules": lambda: self.calculate_perfect_molecules(mask, bond_threshold),
-            "SmilesAccuracy":   lambda: self.calculate_smiles_accuracy(bond_threshold),
+            "TruePositiveRate":     lambda: self.calculate_TPrate(pos_mask, bond_threshold),
+            "TrueNegativeRate":    lambda: self.calculate_TNrate(neg_mask, bond_threshold),
+            "Recall":              lambda: self.calculate_recall(pos_mask, bond_threshold),
+            "Precision":           lambda: self.calculate_precision(pos_mask, neg_mask, bond_threshold),
+            "PerfectMolecules":    lambda: self.calculate_perfect_molecules(bond_mask, bond_threshold),
+            "SmilesAccuracy":      lambda: self.calculate_smiles_accuracy(bond_threshold),
         }
 
         plot_funcs = {
@@ -69,7 +71,7 @@ class ImpDataset:
 
         plot_funcs = {
         "DistanceMEPerMolecule":  lambda: np.histogram(self.calculate_distance_ME_per_molecule(mask), bins=50, ),
-        "DistancePredVsTrue":     lambda: np.histogram2d(self.pair_data.loc[mask, "distance"], self.pair_data.loc[mask, "predicted_distance"], bins=[40,40],range=[[0, 4], [0, 4]]),
+        "DistancePredVsTrue":     lambda: np.histogram2d(self.pair_data.loc[mask, "distance"], self.pair_data.loc[mask, "predicted_distance"], bins=[50,50],range=[[0, 10], [0, 10]]),
         }
 
         self.Metrics = {metric: metric_funcs[metric]() for metric in metrics}
@@ -107,6 +109,13 @@ class ImpDataset:
 
         return TP / (TP + FN)
 
+    def calculate_TPrate(self, pos_mask, bond_threshold):
+        TP = (pos_mask  & (self.pair_data["predicted_bond_existence"] > bond_threshold)).mean()
+        return TP
+
+    def calculate_TNrate(self, neg_mask, bond_threshold):
+        TN = (neg_mask & (self.pair_data["predicted_bond_existence"] < bond_threshold)).mean()
+        return TN
 
     def calculate_perfect_molecules(self, mask, bond_threshold):
         """
@@ -129,8 +138,8 @@ class ImpDataset:
             pair_group = pair_groups.get_group(mol_name)
             atom_group = atom_groups.get_group(mol_name)
 
-            truth_bo = Fn.build_mol_bond_order(atom_group, pair_group, pair_group["bond_order"], rdmol=False)
-            pred     = Fn.build_mol_bond_order(atom_group, pair_group, (pair_group["predicted_bond_existence"] > bond_threshold).astype(int), rdmol=False)
+            truth_bo = U.build_mol_bond_order(atom_group, pair_group, pair_group["bond_existence"], rdmol=False)
+            pred     = U.build_mol_bond_order(atom_group, pair_group, (pair_group["predicted_bond_existence"] > bond_threshold).astype(int), rdmol=False)
 
             results.append(pred == truth_bo)
 
