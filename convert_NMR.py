@@ -6,7 +6,7 @@ import pandas as pd
 from EMS.EMS import EMS
 from EMS.modules.dataframe_generation.dataframe_parse import make_atoms_df, make_pairs_df
  
-with open('/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/PubChem_CHEMBL-B1234-30-200000_2000_eval.sdf', 'r') as f:
+with open('/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/PubChem_CHEMBL-B1234-30-200000_10000_train.sdf', 'r') as f:
     lines = f.read()
     mol_block = lines.split('$$$$\n')
     mol_blocks = [block for block in mol_block if block.strip()]
@@ -38,8 +38,13 @@ atomdf = make_atoms_df(ems_list)
 pairdf = make_pairs_df(ems_list)
 
 
-atomdf.to_parquet(f"/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/FCatomdf_Test.parquet")
-pairdf.to_parquet(f"/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/FCpairdf_Test.parquet")
+atom_molecules = atomdf["molecule_name"].unique()
+pair_molecules = pairdf["molecule_name"].unique()
+print(len(atom_molecules), len(pair_molecules))
+
+
+atomdf.to_parquet(f"/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/FCatomdf_Train.parquet")
+pairdf.to_parquet(f"/home/b5ao/pbellos.b5ao/Spectra/Datasets/SolutionNMRraw/FCpairdf_Train.parquet")
 
 
 

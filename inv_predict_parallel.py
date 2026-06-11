@@ -10,9 +10,40 @@ import matplotlib.pyplot as plt
 from imp_core_pyg.model.GTN_modules.graph_input import make_graph_df
 from imp_core_pyg.model.gtn_model import GTNmodel
 from torch.utils.tensorboard import SummaryWriter
+from torch.utils.data import DistributedSampler
+import time
+from datetime import timedelta
 import argparse
 import Utils as U
 
+from torch.nn.parallel import DistributedDataParallel as DDP
+import torch.distributed as dist
+
+def init_process(backend):
+    """
+    Initialise distributed training with the provided backend.
+
+    The world size and local rank are discovered from environment variables.
+    """    
+    # Join this process to the process group, using the specified backend
+    dist.init_process_group(
+        backend=backend,
+        timeout=timedelta(seconds=60),  # if not all processes join within 5 minutes, the whole job crashes. Useful to avoid hanging forever if one process dies.
+        world_size=int(os.environ["WORLD_SIZE"]),
+    )
+
+    if torch.cuda.is_available():
+        torch.cuda.set_device(local_rank)
+        device = torch.device(f"cuda:{local_rank}")
+    else:
+        device = torch.device("cpu")
+
+    # We only want to print this once; only do so in the main process (i.e. the one with global rank 0)
+    if dist.get_rank() == 0:
+        world_size = dist.get_world_size()
+        print(
+            f"Distributed training initialized with {world_size} processes using backend {backend}."
+        )
 
 def main():
 
@@ -61,18 +92,17 @@ def main():
 
     atomdf, pairdf = U.MakeDataSet2(atomdf_train_path,pairdf_train_path,args.dataset_type,False)
     atomdf_test,pairdf_test = U.MakeDataSet2(atomdf_test_path,pairdf_test_path,args.dataset_type,False)
- 
+
     # get molecules in order of appearance
     molecules = atomdf["molecule_name"].unique()
     test_molecules = atomdf_test["molecule_name"].unique()
     print(len(molecules), len(test_molecules))
 
     # split indices
-    train_cutoff = int(0.9 * len(molecules))  ## 0.0002
+    train_cutoff = int(0.9 * len(molecules))
     
     # molecule splits
     train_molecules = molecules[:train_cutoff]
-    ##train_molecules = train_molecules[1:]    ##
     eval_molecules = molecules[train_cutoff:]
     
     # atom-level splits
@@ -83,20 +113,22 @@ def main():
     train_pair_df = pairdf[pairdf["molecule_name"].isin(train_molecules)]
     eval_pair_df = pairdf[pairdf["molecule_name"].isin(eval_molecules)]
 
-
-    print(train_atom_df.head(100).to_string())
-    print("------------------------------------------------")
-    print(train_pair_df.head(500).to_string())
+    if args.debug=="True" :
+        print(train_atom_df.head(100).to_string())
+        print("------------------------------------------------")
+        print(train_pair_df.head(500).to_string())
 
     print("Datasets ready, will now build and train the model...")
     
-    Mywriter = SummaryWriter(log_dir="./")
-
-    d_embed = 12  ##
+    d_embed = 48  ##
     if args.debug=="True" :
      Epochs = 1
     else :
-     Epochs = 50
+     Epochs = 5
+
+    world_size = dist.get_world_size() if dist.is_initialized() else 1
+    
+    Effective_batchsize=16//dist.get_world_size()
 
     params = {
         "task": "inverse_imp",
@@ -104,29 +136,27 @@ def main():
         "n_head": 8, # must equal no. of target flags you want to predict but ideally should equal no. of total mapping keys 
         "d_embed": d_embed,
         "n_layer": 6,
-        "batch_size": 16,
+        "batch_size": Effective_batchsize,
         "save_checkpoint_freq": 5,
-        #"final_activation": "weighted-sigmoid",  # or weighted-sigmoid   # for distances should be disabled
+        "final_activation": "sigmoid",   # for distances should be disabled
         #"neg_pos_ratio": 10,
-        "molecule_generator": True
+        "molecule_generator": True,
         }  
 
     graph_attr = {
         'typeint': ('atom_types', 'int'),
         'shift': ('shift', 'float'),
-        #'shift_mask': ('shift_mask', 'int'),
         'coupling_label': ('coupling_label', 'int'),
         'nmr_types': ('nmr_types', 'int'),
-        #'bond_existence': ('bond_existence', 'float')
-        'distance': ('distance', 'float')
+        'bond_existence': ('bond_existence', 'float')
+        #'distance': ('distance', 'float')
         }
 
     input_attr = {
         'atom_types': ('embed', 61, d_embed-1),    
         'shift': (None, None, 1),
-        #'shift_mask': (None, None, 1),
-        'coupling_label': ('embed', 100, d_embed-5),      
-        'nmr_types': ('embed', 10000, 5)   #10000
+        'coupling_label': ('embed', 100, 5),      
+        'nmr_types': ('embed', 10000, d_embed-5)   #10000
         }
 
     model_args={'targetflag': [args.target],
@@ -135,19 +165,19 @@ def main():
     }
 
     print("Initialsing model")
-    model = GTNmodel(id="test_Pan", model_args=model_args, model_params = params)
+    INVmodel = GTNmodel(id="test_Pan", model_args=model_args, model_params=params)
 
-    train_loader, _ = model.get_input((train_atom_df, train_pair_df), calculate_scaling=True,  shuffle=True)
-    eval_loader,  _ = model.get_input((eval_atom_df,  eval_pair_df),  calculate_scaling=False, shuffle=True) 
-                                                                                                                                                                                                                        
-    model.train(train_loader=train_loader, eval_loader=eval_loader, progress=True, resume=False, path=Results_path, task_name=args.tag+args.dataset_type+args.target, writer=Mywriter)
+    train_loader, _ = INVmodel.get_input((train_atom_df, train_pair_df), calculate_scaling=True,  shuffle=True)
+    eval_loader,  _ = INVmodel.get_input((eval_atom_df,  eval_pair_df),  calculate_scaling=False, shuffle=True)
+                                                                                                                                                                                                                     
+    INVmodel.train(train_loader=train_loader, eval_loader=eval_loader, progress=True, resume=False, path=Results_path, task_name=args.tag+args.dataset_type+args.target)
 
     df = pd.read_csv(Results_path+args.tag+args.dataset_type+args.target+"/loss_metrics/"+args.target+".csv")
  
-    # U.plot_scatter([df["epochs"], df["epochs"]], [df["train_ml_loss"], df["eval_ml_loss"]],
-    #                colors=["blue", "orange"], labels=["train", "eval"], alpha=0.7, s=10,
-    #                title=args.tag + args.dataset_type + args.target + "/loss_metrics/" + args.target, xlabel="Epoch", ylabel="Loss")
-    
+    U.plot_scatter([df["epochs"], df["epochs"]], [df["train_ml_loss"], df["eval_ml_loss"]],
+                   colors=["blue", "orange"], labels=["train", "eval"], alpha=0.7, s=10,
+                   title='trainCurve', xlabel="Epoch", ylabel="Loss")
+
     if "Train" in args.predict:
         U.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , train_atom_df, train_pair_df, None, Results_path+args.tag+args.dataset_type+args.target+"_train_")
     if "Eval" in args.predict :
@@ -155,6 +185,40 @@ def main():
     if "Test" in args.predict :
         U.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , atomdf_test, pairdf_test, None, Results_path+args.tag+args.dataset_type+args.target+"_test_")
     
+   
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    
+    if torch.cuda.is_available():
+        backend = "nccl"
+    else:
+        backend = "gloo"
+    
+    init_process(backend)  
+    
+    try:
+        main()
+    
+    finally:
+        if dist.is_initialized():
+            dist.destroy_process_group()
+
+
+
+
+
+
+#    # ---------------- test for parallel training-------------------------
+#     # Keep only 19200 train and 9600 test molecules
+#     molecules = atomdf["molecule_name"].unique()[:19200]
+#     test_molecules = atomdf_test["molecule_name"].unique()[:9600]
+
+#     # Filter all four dataframes
+#     atomdf = atomdf[atomdf["molecule_name"].isin(molecules)]
+#     pairdf = pairdf[pairdf["molecule_name"].isin(molecules)]
+
+#     atomdf_test = atomdf_test[atomdf_test["molecule_name"].isin(test_molecules)]
+#     pairdf_test = pairdf_test[pairdf_test["molecule_name"].isin(test_molecules)]
+
+#     print(len(molecules), len(test_molecules))
+#     # -------------------------------------------------------------------
