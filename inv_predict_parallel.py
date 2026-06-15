@@ -8,6 +8,7 @@ from tqdm import tqdm
 import multiprocessing as mp
 import matplotlib.pyplot as plt 
 from imp_core_pyg.model.GTN_modules.graph_input import make_graph_df
+from imp_core_pyg.model.GTN_modules.dist_env import  RANK, LOCAL_RANK, WORLD_SIZE, DEVICE 
 from imp_core_pyg.model.gtn_model import GTNmodel
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DistributedSampler
@@ -29,21 +30,17 @@ def init_process(backend):
     dist.init_process_group(
         backend=backend,
         timeout=timedelta(seconds=60),  # if not all processes join within 5 minutes, the whole job crashes. Useful to avoid hanging forever if one process dies.
-        world_size=int(os.environ["WORLD_SIZE"]),
+        world_size=WORLD_SIZE,
     )
 
-    if torch.cuda.is_available():
-        torch.cuda.set_device(local_rank)
-        device = torch.device(f"cuda:{local_rank}")
-    else:
-        device = torch.device("cpu")
+    device = torch.device(DEVICE)
 
     # We only want to print this once; only do so in the main process (i.e. the one with global rank 0)
-    if dist.get_rank() == 0:
-        world_size = dist.get_world_size()
-        print(
-            f"Distributed training initialized with {world_size} processes using backend {backend}."
-        )
+    # if dist.get_rank() == 0:
+    #     world_size = dist.get_world_size()
+    #     print(
+    #         f"Distributed training initialized with {world_size} processes using backend {backend}."
+    #     )
 
 def main():
 
@@ -124,11 +121,11 @@ def main():
     if args.debug=="True" :
      Epochs = 1
     else :
-     Epochs = 5
+     Epochs = 50
 
     world_size = dist.get_world_size() if dist.is_initialized() else 1
     
-    Effective_batchsize=16//dist.get_world_size()
+    Effective_batchsize=16//world_size
 
     params = {
         "task": "inverse_imp",
@@ -172,20 +169,15 @@ def main():
                                                                                                                                                                                                                      
     INVmodel.train(train_loader=train_loader, eval_loader=eval_loader, progress=True, resume=False, path=Results_path, task_name=args.tag+args.dataset_type+args.target)
 
-    df = pd.read_csv(Results_path+args.tag+args.dataset_type+args.target+"/loss_metrics/"+args.target+".csv")
- 
-    U.plot_scatter([df["epochs"], df["epochs"]], [df["train_ml_loss"], df["eval_ml_loss"]],
-                   colors=["blue", "orange"], labels=["train", "eval"], alpha=0.7, s=10,
-                   title='trainCurve', xlabel="Epoch", ylabel="Loss")
-
-    if "Train" in args.predict:
-        U.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , train_atom_df, train_pair_df, None, Results_path+args.tag+args.dataset_type+args.target+"_train_")
-    if "Eval" in args.predict :
-        U.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , eval_atom_df, eval_pair_df, None, Results_path+args.tag+args.dataset_type+args.target+"_eval_")
-    if "Test" in args.predict :
-        U.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , atomdf_test, pairdf_test, None, Results_path+args.tag+args.dataset_type+args.target+"_test_")
+    if RANK == 0:
     
-   
+        if "Train" in args.predict:
+            U.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , train_atom_df, train_pair_df, None, Results_path+args.tag+args.dataset_type+args.target+"_train_")
+        if "Eval" in args.predict :
+            U.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , eval_atom_df, eval_pair_df, None, Results_path+args.tag+args.dataset_type+args.target+"_eval_")
+        if "Test" in args.predict :
+            U.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , atomdf_test, pairdf_test, None, Results_path+args.tag+args.dataset_type+args.target+"_test_")
+    
 
 if __name__ == "__main__":
     
@@ -202,6 +194,9 @@ if __name__ == "__main__":
     finally:
         if dist.is_initialized():
             dist.destroy_process_group()
+
+
+    
 
 
 
@@ -222,3 +217,18 @@ if __name__ == "__main__":
 
 #     print(len(molecules), len(test_molecules))
 #     # -------------------------------------------------------------------
+
+
+    # df = pd.read_csv(Results_path+args.tag+args.dataset_type+args.target+"/loss_metrics/"+args.target+".csv")
+ 
+    # U.plot_scatter([df["epochs"], df["epochs"]], [df["train_ml_loss"], df["eval_ml_loss"]],
+    #                colors=["blue", "orange"], labels=["train", "eval"], alpha=0.7, s=10,
+    #                title='trainCurve', xlabel="Epoch", ylabel="Loss")
+
+    # if "Train" in args.predict:
+    #     U.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , train_atom_df, train_pair_df, None, Results_path+args.tag+args.dataset_type+args.target+"_train_")
+    # if "Eval" in args.predict :
+    #     U.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , eval_atom_df, eval_pair_df, None, Results_path+args.tag+args.dataset_type+args.target+"_eval_")
+    # if "Test" in args.predict :
+    #     U.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , atomdf_test, pairdf_test, None, Results_path+args.tag+args.dataset_type+args.target+"_test_")
+    
