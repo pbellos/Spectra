@@ -110,12 +110,12 @@ class ImpDataset:
         return TP / (TP + FN)
 
     def calculate_TPrate(self, pos_mask, bond_threshold):
-        TP = (pos_mask  & (self.pair_data["predicted_bond_existence"] > bond_threshold)).mean()
-        return TP
+        TPR = (self.pair_data.loc[pos_mask, "predicted_bond_existence"] > bond_threshold).mean()
+        return TPR
 
     def calculate_TNrate(self, neg_mask, bond_threshold):
-        TN = (neg_mask & (self.pair_data["predicted_bond_existence"] < bond_threshold)).mean()
-        return TN
+        TNR = (self.pair_data.loc[neg_mask, "predicted_bond_existence"] <= bond_threshold).mean()
+        return TNR
 
     def calculate_perfect_molecules(self, mask, bond_threshold):
         """

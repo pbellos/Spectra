@@ -20,28 +20,33 @@ import Utils as U
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
 
+def allreduce_sanity_check(device):
+    t = torch.tensor(float(dist.get_rank()), device=device)
+    dist.all_reduce(t, op=dist.ReduceOp.SUM)
+    expected = sum(range(dist.get_world_size()))
+    if dist.get_rank() == 0:
+        ok = abs(t.item() - expected) < 1e-3
+        print(f"[sanity] all_reduce sum={t.item():.0f}, expected={expected} -> {'OK' if ok else 'BROKEN'}")
+
 def init_process(backend):
     """
     Initialise distributed training with the provided backend.
 
     The world size and local rank are discovered from environment variables.
     """    
-    # Join this process to the process group, using the specified backend
+    # local_rank = int(os.environ["LOCAL_RANK"])  # must be first line
+    # torch.cuda.set_device(local_rank)
+    
     dist.init_process_group(
         backend=backend,
-        timeout=timedelta(seconds=60),  # if not all processes join within 5 minutes, the whole job crashes. Useful to avoid hanging forever if one process dies.
+        timeout=timedelta(seconds=60),
         world_size=WORLD_SIZE,
     )
+    
+    # device = torch.device(f"cuda:{local_rank}")
+    # allreduce_sanity_check(device)
 
-    device = torch.device(DEVICE)
-
-    # We only want to print this once; only do so in the main process (i.e. the one with global rank 0)
-    # if dist.get_rank() == 0:
-    #     world_size = dist.get_world_size()
-    #     print(
-    #         f"Distributed training initialized with {world_size} processes using backend {backend}."
-    #     )
-
+    
 def main():
 
     print(torch.__version__)
@@ -121,15 +126,15 @@ def main():
     if args.debug=="True" :
      Epochs = 1
     else :
-     Epochs = 50
+     Epochs = 30
 
     world_size = dist.get_world_size() if dist.is_initialized() else 1
     
-    Effective_batchsize=16//world_size
+    Effective_batchsize=240//world_size
 
     params = {
         "task": "inverse_imp",
-        "tr_epochs": Epochs, ## 50
+        "tr_epochs": Epochs, ## 3
         "n_head": 8, # must equal no. of target flags you want to predict but ideally should equal no. of total mapping keys 
         "d_embed": d_embed,
         "n_layer": 6,
@@ -170,6 +175,12 @@ def main():
     INVmodel.train(train_loader=train_loader, eval_loader=eval_loader, progress=True, resume=False, path=Results_path, task_name=args.tag+args.dataset_type+args.target)
 
     if RANK == 0:
+
+        df = pd.read_csv(Results_path+args.tag+args.dataset_type+args.target+"/loss_metrics/"+args.target+".csv")
+ 
+        U.plot_scatter([df["epochs"], df["epochs"]], [df["train_ml_loss"], df["eval_ml_loss"]],
+                   colors=["blue", "orange"], labels=["train", "eval"], alpha=0.7, s=10,
+                   title=args.tag+args.dataset_type+args.target, xlabel="Epoch", ylabel="Loss", y_range=[0, 0.1])
     
         if "Train" in args.predict:
             U.RunPrediction(Results_path+args.tag+args.dataset_type+args.target+"/"+args.tag+args.dataset_type+args.target+"_OPT_checkpoint.torch" , train_atom_df, train_pair_df, None, Results_path+args.tag+args.dataset_type+args.target+"_train_")
@@ -183,10 +194,7 @@ if __name__ == "__main__":
     
     if torch.cuda.is_available():
         backend = "nccl"
-    else:
-        backend = "gloo"
-    
-    init_process(backend)  
+        init_process(backend)  
     
     try:
         main()

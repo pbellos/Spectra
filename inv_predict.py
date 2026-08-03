@@ -83,20 +83,20 @@ def main():
     train_pair_df = pairdf[pairdf["molecule_name"].isin(train_molecules)]
     eval_pair_df = pairdf[pairdf["molecule_name"].isin(eval_molecules)]
 
-
-    print(train_atom_df.head(100).to_string())
-    print("------------------------------------------------")
-    print(train_pair_df.head(500).to_string())
+    if args.debug=="True" :
+        print(train_atom_df.head(100).to_string())
+        print("------------------------------------------------")
+        print(train_pair_df.head(500).to_string())
 
     print("Datasets ready, will now build and train the model...")
     
-    Mywriter = SummaryWriter(log_dir="./")
-
-    d_embed = 12  ##
+    d_embed = 48  ##
     if args.debug=="True" :
      Epochs = 1
     else :
      Epochs = 50
+
+    Effective_batchsize=16
 
     params = {
         "task": "inverse_imp",
@@ -104,29 +104,27 @@ def main():
         "n_head": 8, # must equal no. of target flags you want to predict but ideally should equal no. of total mapping keys 
         "d_embed": d_embed,
         "n_layer": 6,
-        "batch_size": 16,
+        "batch_size": Effective_batchsize,
         "save_checkpoint_freq": 5,
-        #"final_activation": "weighted-sigmoid",  # or weighted-sigmoid   # for distances should be disabled
+        "final_activation": "sigmoid",   # for distances should be disabled
         #"neg_pos_ratio": 10,
-        "molecule_generator": True
+        "molecule_generator": True,
         }  
 
     graph_attr = {
         'typeint': ('atom_types', 'int'),
         'shift': ('shift', 'float'),
-        #'shift_mask': ('shift_mask', 'int'),
         'coupling_label': ('coupling_label', 'int'),
         'nmr_types': ('nmr_types', 'int'),
-        #'bond_existence': ('bond_existence', 'float')
-        'distance': ('distance', 'float')
+        'bond_existence': ('bond_existence', 'float')
+        #'distance': ('distance', 'float')
         }
 
     input_attr = {
         'atom_types': ('embed', 61, d_embed-1),    
         'shift': (None, None, 1),
-        #'shift_mask': (None, None, 1),
-        'coupling_label': ('embed', 100, d_embed-5),      
-        'nmr_types': ('embed', 10000, 5)   #10000
+        'coupling_label': ('embed', 100, 5),      
+        'nmr_types': ('embed', 10000, d_embed-5)   #10000
         }
 
     model_args={'targetflag': [args.target],
@@ -135,14 +133,14 @@ def main():
     }
 
     print("Initialsing model")
-    model = GTNmodel(id="test_Pan", model_args=model_args, model_params = params)
+    INVmodel = GTNmodel(id="test_Pan", model_args=model_args, model_params=params)
 
-    train_loader, _ = model.get_input((train_atom_df, train_pair_df), calculate_scaling=True,  shuffle=True)
-    eval_loader,  _ = model.get_input((eval_atom_df,  eval_pair_df),  calculate_scaling=False, shuffle=True) 
-                                                                                                                                                                                                                        
-    model.train(train_loader=train_loader, eval_loader=eval_loader, progress=True, resume=False, path=Results_path, task_name=args.tag+args.dataset_type+args.target, writer=Mywriter)
-
-    df = pd.read_csv(Results_path+args.tag+args.dataset_type+args.target+"/loss_metrics/"+args.target+".csv")
+    train_loader, _ = INVmodel.get_input((train_atom_df, train_pair_df), calculate_scaling=True,  shuffle=True)
+    eval_loader,  _ = INVmodel.get_input((eval_atom_df,  eval_pair_df),  calculate_scaling=False, shuffle=True)
+                                                                                                                                                                                                                     
+    INVmodel.train(train_loader=train_loader, eval_loader=eval_loader, progress=True, resume=False, path=Results_path, task_name=args.tag+args.dataset_type+args.target)
+   
+    # df = pd.read_csv(Results_path+args.tag+args.dataset_type+args.target+"/loss_metrics/"+args.target+".csv")
  
     # U.plot_scatter([df["epochs"], df["epochs"]], [df["train_ml_loss"], df["eval_ml_loss"]],
     #                colors=["blue", "orange"], labels=["train", "eval"], alpha=0.7, s=10,

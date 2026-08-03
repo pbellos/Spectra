@@ -24,7 +24,7 @@ def RunPrediction(model_path, atomdf, pairdf, atom_save_path, pair_save_path):
     # print(imp_model.args)
     # print(imp_model.params)
 
-    pred_atomdf, pred_pairdf = imp_model.predict(atomdf, pairdf, progress=True)
+    pred_atomdf, pred_pairdf = imp_model.predict(atomdf, pairdf, None, progress=True)
 
     if atom_save_path is not None:
         pred_atomdf.to_parquet(atom_save_path + "atomdf.parquet")
@@ -106,7 +106,7 @@ def plot_scatter(x_data, y_data, title=None, xlabel=None, ylabel=None, colors=No
         plt.legend()
 
     plt.tight_layout()
-    plt.savefig("Plots/" + (title if title else "scatter") + ".png")
+    plt.savefig("/home/b5ao/pbellos.b5ao/Spectra/Plots/" + (title if title else "scatter") + ".png")
     plt.close()
 
 def plot_histogram2d(data, bins, title=None, xlabel=None, ylabel=None, x_range=None, y_range=None):
